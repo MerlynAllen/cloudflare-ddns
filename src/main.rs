@@ -1,18 +1,12 @@
-use reqwest;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use dns_lookup::getaddrinfo;
-use anyhow::Result;
 use log::{debug, info, error};
-use pretty_env_logger;
-use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::sync::RwLock;
 use std::time::Duration;
 use clap::Parser;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::time::{Instant, SystemTime};
-use chrono;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -52,7 +46,8 @@ struct RequestBody {
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 enum RecordType {
     A,
-    AAAA,
+    #[serde(rename = "AAAA")]
+    Aaaa,
 }
 
 const DEFAULT_TIMEOUT_SECS: u64 = 10;
@@ -124,7 +119,7 @@ fn get_ip(ip_version: IpVersion) -> Option<IpAddr> {
     match ip_version {
         V4 => {
             for ipv4 in dns_result.iter().filter(|&i| i.is_ipv4()) {
-                match get_ip_with_overwritten_dns(ipv4.clone()) {
+                match get_ip_with_overwritten_dns(*ipv4) {
                     None => continue,
                     others => return others
                 }
@@ -133,7 +128,7 @@ fn get_ip(ip_version: IpVersion) -> Option<IpAddr> {
         }
         V6 => {
             for ipv6 in dns_result.iter().filter(|&i| i.is_ipv6()) {
-                match get_ip_with_overwritten_dns(ipv6.clone()) {
+                match get_ip_with_overwritten_dns(*ipv6) {
                     None => continue,
                     others => return others
                 }
@@ -165,7 +160,7 @@ fn compose_headers(config: &Config) -> HeaderMap {
 fn compose_body(domain: &Domain, (ipv4, ipv6): (Option<IpAddr>, Option<IpAddr>)) -> Option<String> {
     let ip = match domain.record_type {
         RecordType::A => ipv4,
-        RecordType::AAAA => ipv6
+        RecordType::Aaaa => ipv6
     }?; // If the IP does not exist, return None.
 
     let now_string = chrono::offset::Local::now();
