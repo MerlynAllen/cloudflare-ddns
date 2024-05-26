@@ -1,8 +1,13 @@
+#![feature(thread_sleep_until)]
+#![feature(duration_constructors)]
+
+mod scheduler;
+
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use dns_lookup::getaddrinfo;
 use log::{debug, info, error};
 use std::path::{Path};
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard};
 use std::time::Duration;
 use clap::Parser;
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -57,6 +62,7 @@ const MYIP_API: &str = "https://myip.merlyn.dev/";
 const MYIP_HOST: &str = "myip.merlyn.dev";
 // struct DNSResult(Option<Ipv4Addr>, Option<Ipv6Addr>);
 static MYIP_DNS_RECORDS: RwLock<Option<Vec<SocketAddr>>> = RwLock::new(None);
+static CONFIG: RwLock<Option<Config>> = RwLock::new(None);
 
 fn myip_api_dns_resolve() -> Option<Vec<SocketAddr>> {
     let mut result = Vec::new();
@@ -68,6 +74,7 @@ fn myip_api_dns_resolve() -> Option<Vec<SocketAddr>> {
 }
 
 use IpVersion::*;
+use crate::scheduler::Scheduler;
 
 enum IpVersion {
     V4,
@@ -75,14 +82,16 @@ enum IpVersion {
 }
 
 
+/// Refresh local cache
+fn refresh_ip() -> Option<()> {
+    let mut myip_dns_records = MYIP_DNS_RECORDS.write().ok()?;
+    debug!("Resolving DNS of {MYIP_HOST}");
+    *myip_dns_records = myip_api_dns_resolve();
+    Some(())
+}
+
+/// Gets IP from local cache, do not refresh
 fn get_ip(ip_version: IpVersion) -> Option<IpAddr> {
-    {
-        let mut myip_dns_records = MYIP_DNS_RECORDS.write().ok()?;
-        if myip_dns_records.is_none() { // Only invoke dns lookup once
-            debug!("Resolving DNS of {MYIP_HOST}");
-            *myip_dns_records = myip_api_dns_resolve();
-        }
-    } // drop write lock
     let dns_result = { MYIP_DNS_RECORDS.read().ok()?.clone()? };
 
     let get_ip_with_overwritten_dns = |mut ip: SocketAddr| -> Option<IpAddr> {
@@ -176,42 +185,67 @@ fn compose_body(domain: &Domain, (ipv4, ipv6): (Option<IpAddr>, Option<IpAddr>))
     serde_json::to_string(&body).ok()
 }
 
+
+fn task_refresh_ip() -> Option<()> {
+    refresh_ip();
+    let ipv4 = get_ip(V4);
+    let ipv6 = get_ip(V6);
+    info!("IPv4: {}", if let Some(ipv4) = ipv4 { ipv4.to_string() } else { "None".to_string() });
+    info!("IPv6: {}", if let Some(ipv6) = ipv6 { ipv6.to_string() } else { "None".to_string() });
+    Some(())
+}
+
+
+fn task_update_dns_record() -> Option<()> {
+    let ipv4 = get_ip(V4);
+    let ipv6 = get_ip(V6);
+    let config = CONFIG.read().ok()?;
+    if let Some(config) = config.as_ref() {
+        let headers = compose_headers(config);
+        for domain in config.domains.iter().clone() {
+            let body = match compose_body(&domain, (ipv4, ipv6)) {
+                Some(body) => body,
+                None => continue,
+            };
+            let client = reqwest::blocking::ClientBuilder::new()
+                .use_rustls_tls()
+                .default_headers(headers.clone())
+                .timeout(Duration::from_secs(config.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS)))
+                .build().unwrap();
+            let api = format!("{}/zones/{}/dns_records/{}", CF_API, domain.zone_id, domain.id);
+            let response = client
+                .patch(api)
+                .body(body)
+                .send();
+            if response.is_err() {
+                debug!("{:?}", response.unwrap_err());
+                continue;
+            }
+            debug!("{:?}", response.unwrap());
+            info!("Done updating.")
+        }
+    }
+    Some(())
+}
+
 fn main() {
     pretty_env_logger::init();
     let args = Cmd::parse();
     // read config
     let config = read_config(args.config).expect("Error reading config!");
-
-    let ipv4 = get_ip(V4);
-    let ipv6 = get_ip(V6);
-
-    info!("IPv4: {}\nIPv6: {}",
-        if let Some(ipv4) = ipv4 { ipv4.to_string() } else { "None".to_string() },
-        if let Some(ipv6) = ipv6 { ipv6.to_string() } else { "None".to_string() }
+    {
+        let mut global_config_lock = CONFIG.write().unwrap();
+        *global_config_lock = Some(config);
+    } // Drop the write lock
+    let mut scheduler = Scheduler::new();
+    scheduler.schedule(
+        Box::new(task_refresh_ip),
+        Duration::from_mins(5),
     );
 
-    let headers = compose_headers(&config);
-    for domain in config.domains {
-        let body = match compose_body(&domain, (ipv4, ipv6)) {
-            Some(body) => body,
-            None => continue,
-        };
-        let client = reqwest::blocking::ClientBuilder::new()
-            .use_rustls_tls()
-            .default_headers(headers.clone())
-            .timeout(Duration::from_secs(config.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS)))
-            .build().unwrap();
-        let api = format!("{}/zones/{}/dns_records/{}", CF_API, domain.zone_id, domain.id);
-        let response = client
-            .patch(api)
-            .body(body)
-            .send();
-        if response.is_err() {
-            debug!("{:?}", response.unwrap_err());
-            continue;
-        }
-        debug!("{:?}", response.unwrap());
-        info!("Done updating.")
-    }
-    println!("Done.")
+    scheduler.schedule(
+        Box::new(task_update_dns_record),
+        Duration::from_mins(5),
+    );
+    scheduler.run();
 }
