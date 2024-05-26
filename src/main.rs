@@ -215,6 +215,8 @@ fn main() {
             debug!("{:?}", response.unwrap_err());
             continue;
         }
-        debug!("{:?}", response.unwrap())
+        debug!("{:?}", response.unwrap());
+        info!("Done updating.")
     }
+    println!("Done.")
 }
