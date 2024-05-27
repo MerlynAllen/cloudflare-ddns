@@ -92,7 +92,7 @@ impl Scheduler {
                 Some(t) => t,
                 None => continue,
             };
-            debug!("Next task [{}] will execute at: {}", task.name, chrono::DateTime::<Local>::from(task.get_system_time()));
+            debug!("Next task [{}] will execute at: {}", task.name, chrono::DateTime::<Local>::from(task.at_system_time()));
             thread::sleep_until(task.at.0);
             // Time's up
             debug!("Task [{}] time's up.", task.name);
@@ -104,14 +104,15 @@ impl Scheduler {
                 if result.is_some() { "normally" } else { "with error" })
             });
             task.at.0 += task.interval;
-            debug!("Task [{}] rescheduled at {}", task.name, chrono::DateTime::<Local>::from(task.get_system_time()));
+            debug!("Task [{}] rescheduled at {}", task.name, chrono::DateTime::<Local>::from(task.at_system_time()));
             self.tasks.push(task)
         }
     }
 }
 
+/// Get SystemTime from Instant.
 impl Task {
-    fn get_system_time(&self) -> SystemTime {
+    fn at_system_time(&self) -> SystemTime {
         self.created_at.0 + (self.at.0 - self.created_at.1)
     }
 }

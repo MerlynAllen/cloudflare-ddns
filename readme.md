@@ -20,7 +20,7 @@ RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target aarch64
 ```
 ## Docker
 
-Currently only available on `Linux x86-64`.
+Currently only available on `Linux x86-64` and `Linux aarch64`.
 ```bash
 docker run -d \
        -v <path-to-config>:/ddns/ddns_config.json \
