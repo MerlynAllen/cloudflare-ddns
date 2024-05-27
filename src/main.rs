@@ -44,7 +44,7 @@ struct Domain {
 struct Cmd {
     #[arg(short, long, default_value = "ddns_config.json")]
     config: String,
-    #[arg(short, long, default_value = "true")]
+    #[arg(short, long, default_value = "false")]
     oneshot: bool,
     #[arg(short, long, default_value = "Off")]
     loglevel: LevelFilter,
