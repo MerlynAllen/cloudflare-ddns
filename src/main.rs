@@ -1,29 +1,39 @@
 #![feature(thread_sleep_until)]
 #![feature(duration_constructors)]
 
-mod scheduler;
-
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use dns_lookup::getaddrinfo;
-use log::{debug, info, error};
-use std::path::{Path};
-use std::sync::{RwLock, RwLockReadGuard};
+use std::path::Path;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::Duration;
+use std::io::Write;
+
+
 use clap::Parser;
+use dns_lookup::getaddrinfo;
+use log::{debug, error, info};
+use log::LevelFilter::Debug;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+
+use IpVersion::*;
+
+use crate::scheduler::Scheduler;
+
+mod scheduler;
 
 #[derive(Debug, Deserialize)]
 struct Config {
     cf_key: String,
     cf_mail: String,
     timeout: Option<u64>,
+    ip_refresh_interval: Option<u64>,
     domains: Vec<Domain>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Domain {
     id: String,
+    update_interval: u64,
     zone_id: String,
     record_type: RecordType,
     name: String,
@@ -56,6 +66,7 @@ enum RecordType {
 }
 
 const DEFAULT_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_IP_REFRESH_INTERVAL_SECS: u64 = 300;
 
 const CF_API: &str = "https://api.cloudflare.com/client/v4";
 const MYIP_API: &str = "https://myip.merlyn.dev/";
@@ -72,9 +83,6 @@ fn myip_api_dns_resolve() -> Option<Vec<SocketAddr>> {
     }
     Some(result)
 }
-
-use IpVersion::*;
-use crate::scheduler::Scheduler;
 
 enum IpVersion {
     V4,
@@ -196,56 +204,61 @@ fn task_refresh_ip() -> Option<()> {
 }
 
 
-fn task_update_dns_record() -> Option<()> {
-    let ipv4 = get_ip(V4);
-    let ipv6 = get_ip(V6);
-    let config = CONFIG.read().ok()?;
-    if let Some(config) = config.as_ref() {
-        let headers = compose_headers(config);
-        for domain in config.domains.iter().clone() {
-            let body = match compose_body(&domain, (ipv4, ipv6)) {
-                Some(body) => body,
-                None => continue,
-            };
-            let client = reqwest::blocking::ClientBuilder::new()
-                .use_rustls_tls()
-                .default_headers(headers.clone())
-                .timeout(Duration::from_secs(config.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS)))
-                .build().unwrap();
-            let api = format!("{}/zones/{}/dns_records/{}", CF_API, domain.zone_id, domain.id);
-            let response = client
-                .patch(api)
-                .body(body)
-                .send();
-            if response.is_err() {
-                debug!("{:?}", response.unwrap_err());
-                continue;
-            }
-            debug!("{:?}", response.unwrap());
-            info!("Done updating.")
-        }
-    }
-    Some(())
-}
-
 fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::formatted_timed_builder().filter_level(Debug).init();
     let args = Cmd::parse();
     // read config
-    let config = read_config(args.config).expect("Error reading config!");
-    {
-        let mut global_config_lock = CONFIG.write().unwrap();
-        *global_config_lock = Some(config);
-    } // Drop the write lock
+    let config = Box::new(read_config(args.config).expect("Error reading config!"));
+    let config: &'static _ = Box::leak(config);
+    // {
+    //     let mut global_config_lock = CONFIG.write().unwrap();
+    //     *global_config_lock = Some(config);
+    // } // Drop the write lock
     let mut scheduler = Scheduler::new();
-    scheduler.schedule(
-        Box::new(task_refresh_ip),
-        Duration::from_mins(5),
-    );
 
     scheduler.schedule(
-        Box::new(task_update_dns_record),
-        Duration::from_mins(5),
+        "IP updater".to_string(),
+        Arc::new(task_refresh_ip),
+        Duration::from_secs(config.ip_refresh_interval.unwrap_or(DEFAULT_IP_REFRESH_INTERVAL_SECS)),
     );
+
+
+    // let config = CONFIG.read().ok()?;
+    let headers = compose_headers(config);
+    for domain in config.domains.iter().clone() {
+        let headers = headers.clone();
+        scheduler.schedule(
+            format!("Domain updater ({})", domain.name),
+            Arc::new(move || {
+                let ipv4 = get_ip(V4);
+                let ipv6 = get_ip(V6);
+                let body = match compose_body(domain, (ipv4, ipv6)) {
+                    Some(body) => body,
+                    None => return Some(()),
+                };
+                let client = reqwest::blocking::ClientBuilder::new()
+                    .use_rustls_tls()
+                    .default_headers(headers.clone())
+                    .timeout(Duration::from_secs(config.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS)))
+                    .build().unwrap();
+                let api = format!("{}/zones/{}/dns_records/{}", CF_API, domain.zone_id, domain.id);
+                let response = client
+                    .patch(api)
+                    .body(body)
+                    .send();
+                if response.is_err() {
+                    debug!("{:?}", response.unwrap_err());
+                    return Some(());
+                }
+                debug!("{:?}", response.unwrap());
+                info!("Done updating.");
+
+                Some(())
+            }),
+            Duration::from_secs(domain.update_interval),
+        );
+    };
+
+
     scheduler.run();
 }
