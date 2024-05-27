@@ -18,35 +18,51 @@ static-linking.
 ```bash
 RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target aarch64-unknown-linux-gnu
 ```
+## Docker
+
+Currently only available on `Linux x86-64`.
+```bash
+docker run -d \
+       -v <path-to-config>:/ddns/ddns_config.json \
+       --network host \
+       --name ddns \
+       merlynallen/cloudflare-ddns:latest
+```
 
 ## Usage
 
 - One-shot
     ```bash
-    ./cloudflare-ddns --config <config-path>
+    ./cloudflare-ddns --config <config-path> --oneshot
     ```
 - Debug
   ```bash
-  RUST_LOG=debug ./cloudflare-ddns --config <config-path>
+  ./cloudflare-ddns --config <config-path> --loglevel debug
   ```
 - Periodic Task
+    
+  This program now supports scheduling periodic tasks. But if you want, you can also use crontab.
 
   Add this to crontab
     ```crontab
-    */5 * * * * /path/to/cloudflare-ddns --config /path/to/config
+    */5 * * * * /path/to/cloudflare-ddns --config /path/to/config --oneshot
     ```
+  
+
 
 ## Sample Config File
 
-```json
+```
 {
   "cf_key": "your_global_api_key",
   "cf_mail": "your_account_email_address",
-  "timeout": 10,
+  "timeout": 10,                           // optional
+  "ip_refresh_interval": 300,              // optional
   "domains": [
     {
       "name": "domain.zone",
       "id": "id_of_this_record",
+      "update_interval": 600, // optional
       "zone_id": "domain_of_this_zone",
       "record_type": "A",
       "ttl": 60
@@ -54,6 +70,7 @@ RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target aarch64
     {
       "name": "domain.zone",
       "id": "id_of_this_record",
+      "update_interval": 600,              // optional
       "zone_id": "domain_of_this_zone",
       "record_type": "AAAA",
       "ttl": 60
