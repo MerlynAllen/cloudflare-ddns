@@ -1,16 +1,15 @@
 #![feature(thread_sleep_until)]
 #![feature(duration_constructors)]
 
+use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::Duration;
-use std::io::Write;
-
 
 use clap::Parser;
 use dns_lookup::getaddrinfo;
-use log::{debug, error, info};
+use log::{debug, error, info, LevelFilter};
 use log::LevelFilter::Debug;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -45,6 +44,10 @@ struct Domain {
 struct Cmd {
     #[arg(short, long, default_value = "ddns_config.json")]
     config: String,
+    #[arg(short, long, default_value = "true")]
+    oneshot: bool,
+    #[arg(short, long, default_value = "Off")]
+    loglevel: LevelFilter,
 }
 
 #[derive(Debug, Serialize)]
@@ -204,12 +207,49 @@ fn task_refresh_ip() -> Option<()> {
 }
 
 
+fn oneshot(config: &Config) {
+    task_refresh_ip();
+    let ipv4 = get_ip(V4);
+    let ipv6 = get_ip(V6);
+    let headers = compose_headers(config);
+    for domain in config.domains.iter().clone() {
+        let body = match compose_body(domain, (ipv4, ipv6)) {
+            Some(body) => body,
+            None => return,
+        };
+        let client = reqwest::blocking::ClientBuilder::new()
+            .use_rustls_tls()
+            .default_headers(headers.clone())
+            .timeout(Duration::from_secs(config.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS)))
+            .build().unwrap();
+        let api = format!("{}/zones/{}/dns_records/{}", CF_API, domain.zone_id, domain.id);
+        let response = client
+            .patch(api)
+            .body(body)
+            .send();
+        if response.is_err() {
+            debug!("{:?}", response.unwrap_err());
+            return;
+        }
+        debug!("{:?}", response.unwrap());
+        info!("Done updating.");
+        println!("Done.")
+    }
+}
+
 fn main() {
-    pretty_env_logger::formatted_timed_builder().filter_level(Debug).init();
+    let mut logger_builder = pretty_env_logger::formatted_timed_builder();
     let args = Cmd::parse();
+    logger_builder.filter_level(args.loglevel).init();
     // read config
     let config = Box::new(read_config(args.config).expect("Error reading config!"));
     let config: &'static _ = Box::leak(config);
+
+    if args.oneshot {
+        println!("Oneshot");
+        return oneshot(config);
+    }
+
     // {
     //     let mut global_config_lock = CONFIG.write().unwrap();
     //     *global_config_lock = Some(config);
