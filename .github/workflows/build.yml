@@ -1,0 +1,50 @@
+name: Build for x86-64 Linux
+run-name: Build for x86-64 Linux
+on: [push]
+jobs:
+    build-x86_64-unknown-linux-gnu:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: dtolnay/rust-toolchain@stable
+            - name: Log in to Docker Hub
+              uses: docker/login-action@v3
+              with:
+                username: ${{ vars.DOCKER_USERNAME }}
+                password: ${{ secrets.DOCKER_PASSWORD }}
+
+
+            - run: cargo build --release
+            - name: Push to Docker Hub
+              uses: docker/build-push-action@v4
+              with:
+                  context: .
+                  push: true
+                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
+                  platforms: linux/amd64
+            - run: mv target/release/cloudflare-ddns cloudflare-ddns-x86_64-unknown-linux-gnu
+            
+            - run: cross build --release --target aarch64-unknown-linux-gnu
+            - name: Push to Docker Hub
+              uses: docker/build-push-action@v4
+              with:
+                  context: .
+                  push: true
+                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
+                  platforms: linux/arm64/v8
+            - run: mv target/aarch64-unknown-linux-gnu/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-gnu
+
+
+            - run: cross build --release --target x86_64-pc-windows-gnu
+            - run: mv target/x86_64-pc-windows-gnu/release/cloudflare-ddns.exe cloudflare-ddns-x86_64-pc-windows-gnu.exe
+
+
+            - name: Release to GitHub
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: |
+                      cloudflare-ddns-x86_64-unknown-linux-gnu
+                      cloudflare-ddns-aarch64-unknown-linux-gnu
+                      cloudflare-ddns-x86_64-pc-windows-gnu.exe
+                  draft: false
+                  prerelease: true
