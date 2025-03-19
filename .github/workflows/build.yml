@@ -24,7 +24,7 @@ jobs:
                   platforms: linux/amd64
             - run: mv target/release/cloudflare-ddns cloudflare-ddns-x86_64-unknown-linux-gnu
             
-            - run: cross build --release --target aarch64-unknown-linux-gnu
+            - run: cross build --release --target aarch64-unknown-linux-musl
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
               with:
@@ -32,7 +32,7 @@ jobs:
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/arm64/v8
-            - run: mv target/aarch64-unknown-linux-gnu/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-gnu
+            - run: mv target/aarch64-unknown-linux-musl/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-musl
 
 
             - run: cross build --release --target x86_64-pc-windows-gnu
@@ -44,7 +44,7 @@ jobs:
               with:
                   files: |
                       cloudflare-ddns-x86_64-unknown-linux-gnu
-                      cloudflare-ddns-aarch64-unknown-linux-gnu
+                      cloudflare-ddns-aarch64-unknown-linux-musl
                       cloudflare-ddns-x86_64-pc-windows-gnu.exe
                   draft: false
                   prerelease: true
