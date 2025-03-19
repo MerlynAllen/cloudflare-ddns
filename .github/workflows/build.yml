@@ -54,20 +54,14 @@ jobs:
                   username: ${{ vars.DOCKER_USERNAME }}
                   password: ${{ secrets.DOCKER_PASSWORD }}
 
-            - name: Push to Docker Hub
-              uses: docker/build-push-action@v4
-              with:
-                  context: .
-                  push: true
-                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
-                  platforms: linux/amd64
 
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
+              if: contains(matrix.platform.target, 'linux')
               with:
                   context: .
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/arm64/v8
                   build-args: |
-                        ARCH=aarch64-unknown-linux-musl
+                        ARCH=${{ matrix.platform.target }}
