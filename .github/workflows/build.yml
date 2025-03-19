@@ -1,21 +1,59 @@
 name: Build and Release
 run-name: Build artifacts and docker images for all platforms
 on: [push]
+
 jobs:
-    build-x86_64-unknown-linux-gnu:
-        runs-on: ubuntu-22.04
+    release:
+        name: Release - ${{ matrix.platform.os-name }}
+        strategy:
+            matrix:
+                platform:
+                    - os-name: Linux-x86_64
+                      runs-on: ubuntu-24.04
+                      target: x86_64-unknown-linux-musl
+
+                    - os-name: Linux-aarch64
+                      runs-on: ubuntu-24.04
+                      target: aarch64-unknown-linux-musl
+
+                    - os-name: Linux-riscv64
+                      runs-on: ubuntu-24.04
+                      target: riscv64gc-unknown-linux-gnu
+
+                    - os-name: Windows-x86_64
+                      runs-on: windows-latest
+                      target: x86_64-pc-windows-msvc
+
+                    - os-name: macOS-x86_64
+                      runs-on: macOS-latest
+                      target: x86_64-apple-darwin
+
+                    # more targets here ...
+
+        runs-on: ${{ matrix.platform.runs-on }}
         steps:
-            - uses: actions/checkout@v4
-            - run: sudo apt-get update && sudo apt-get update
-            - uses: dtolnay/rust-toolchain@stable
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Build binary
+              uses: houseabsolute/actions-rust-cross@v1
+              with:
+                  command: ${{ matrix.platform.command }}
+                  target: ${{ matrix.platform.target }}
+                  args: "--locked --release"
+                  strip: true
+
+            - name: Publish artifacts and release
+              uses: houseabsolute/actions-rust-release@v0
+              with:
+                  executable-name: cloudflare-ddns
+                  target: ${{ matrix.platform.target }}
+
             - name: Log in to Docker Hub
               uses: docker/login-action@v3
               with:
-                username: ${{ vars.DOCKER_USERNAME }}
-                password: ${{ secrets.DOCKER_PASSWORD }}
-            - run: sudo cargo install cross --git https://github.com/cross-rs/cross
+                  username: ${{ vars.DOCKER_USERNAME }}
+                  password: ${{ secrets.DOCKER_PASSWORD }}
 
-            - run: sudo cargo build --release
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
               with:
@@ -23,9 +61,7 @@ jobs:
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/amd64
-            - run: sudo mv target/release/cloudflare-ddns cloudflare-ddns-x86_64-unknown-linux-gnu
-            
-            - run: sudo cross build --release --target aarch64-unknown-linux-musl
+
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
               with:
@@ -33,19 +69,5 @@ jobs:
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/arm64/v8
-            - run: sudo mv target/aarch64-unknown-linux-musl/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-musl
-
-
-            - run: sudo cross build --release --target x86_64-pc-windows-gnu
-            - run: sudo mv target/x86_64-pc-windows-gnu/release/cloudflare-ddns.exe cloudflare-ddns-x86_64-pc-windows-gnu.exe
-
-
-            - name: Release to GitHub
-              uses: softprops/action-gh-release@v2
-              with:
-                  files: |
-                      cloudflare-ddns-x86_64-unknown-linux-gnu
-                      cloudflare-ddns-aarch64-unknown-linux-musl
-                      cloudflare-ddns-x86_64-pc-windows-gnu.exe
-                  draft: false
-                  prerelease: true
+                  build-args: |
+                        ARCH=aarch64-unknown-linux-musl
