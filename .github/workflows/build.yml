@@ -62,7 +62,6 @@ jobs:
               with:
                   context: .
                   push: true
-                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
-                  platforms: linux/arm64/v8
+                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:${{ matrix.platform.target }}
                   build-args: |
                         ARCH=${{ matrix.platform.target }}
