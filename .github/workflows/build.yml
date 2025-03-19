@@ -14,9 +14,9 @@ jobs:
               with:
                 username: ${{ vars.DOCKER_USERNAME }}
                 password: ${{ secrets.DOCKER_PASSWORD }}
-            - run: cargo install cross --git https://github.com/cross-rs/cross
+            - run: sudo cargo install cross --git https://github.com/cross-rs/cross
 
-            - run: cargo build --release
+            - run: sudo cargo build --release
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
               with:
@@ -24,9 +24,9 @@ jobs:
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/amd64
-            - run: mv target/release/cloudflare-ddns cloudflare-ddns-x86_64-unknown-linux-gnu
+            - run: sudo mv target/release/cloudflare-ddns cloudflare-ddns-x86_64-unknown-linux-gnu
             
-            - run: cross build --release --target aarch64-unknown-linux-musl
+            - run: sudo cross build --release --target aarch64-unknown-linux-musl
             - name: Push to Docker Hub
               uses: docker/build-push-action@v4
               with:
@@ -34,11 +34,11 @@ jobs:
                   push: true
                   tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:latest
                   platforms: linux/arm64/v8
-            - run: mv target/aarch64-unknown-linux-musl/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-musl
+            - run: sudo mv target/aarch64-unknown-linux-musl/release/cloudflare-ddns cloudflare-ddns-aarch64-unknown-linux-musl
 
 
-            - run: cross build --release --target x86_64-pc-windows-gnu
-            - run: mv target/x86_64-pc-windows-gnu/release/cloudflare-ddns.exe cloudflare-ddns-x86_64-pc-windows-gnu.exe
+            - run: sudo cross build --release --target x86_64-pc-windows-gnu
+            - run: sudo mv target/x86_64-pc-windows-gnu/release/cloudflare-ddns.exe cloudflare-ddns-x86_64-pc-windows-gnu.exe
 
 
             - name: Release to GitHub
