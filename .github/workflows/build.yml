@@ -48,20 +48,20 @@ jobs:
                   executable-name: cloudflare-ddns
                   target: ${{ matrix.platform.target }}
 
-            - name: Log in to Docker Hub
-              uses: docker/login-action@v3
-              if: contains(matrix.platform.target, 'linux')
-              with:
-                  username: ${{ vars.DOCKER_USERNAME }}
-                  password: ${{ secrets.DOCKER_PASSWORD }}
+            # - name: Log in to Docker Hub
+            #   uses: docker/login-action@v3
+            #   if: contains(matrix.platform.target, 'linux')
+            #   with:
+            #       username: ${{ vars.DOCKER_USERNAME }}
+            #       password: ${{ secrets.DOCKER_PASSWORD }}
 
 
-            - name: Push to Docker Hub
-              uses: docker/build-push-action@v4
-              if: contains(matrix.platform.target, 'linux')
-              with:
-                  context: .
-                  push: true
-                  tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:${{ matrix.platform.target }}
-                  build-args: |
-                        ARCH=${{ matrix.platform.target }}
+            # - name: Push to Docker Hub
+            #   uses: docker/build-push-action@v4
+            #   if: contains(matrix.platform.target, 'linux')
+            #   with:
+            #       context: .
+            #       push: true
+            #       tags: ${{ vars.DOCKER_USERNAME }}/cloudflare-ddns:${{ matrix.platform.target }}
+            #       build-args: |
+            #             ARCH=${{ matrix.platform.target }}
