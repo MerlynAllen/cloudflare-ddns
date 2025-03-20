@@ -62,11 +62,12 @@ impl Scheduler {
     pub fn schedule(&mut self, task_name: String, func: Arc<HandlerFn>, interval: Duration) {
         self.schedules.push(
             Schedule {
-                task_name,
+                task_name: task_name.clone(),
                 interval,
                 handler: func,
             }
-        )
+        );
+        debug!("Task [{}] scheduled every {} seconds.", task_name, interval.as_secs());
     }
 
 
