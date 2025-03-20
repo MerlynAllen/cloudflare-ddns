@@ -6,10 +6,5 @@ services:
         ARCH: x86_64
         LIBC: musl
         VERSION: 1.0.0
-    environment:
-      - API_KEY=your_cloudflare_api_key
-      - ZONE=your_domain.com
-      - SUBDOMAIN=subdomain
-      - PROXIED=true
     volumes:
       - ./ddns_config.json:/ddns/ddns_config.json

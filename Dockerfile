@@ -4,6 +4,8 @@ ARG ARCH=x86_64
 ARG LIBC=musl
 ARG VERSION=1.0.0
 
+ENV RUST_LOG=debug
+
 WORKDIR /ddns
 
 ADD https://github.com/MerlynAllen/cloudflare-ddns/releases/download/v${VERSION}/cloudflare-ddns-Linux-${LIBC}-${ARCH}.tar.gz /ddns/
