@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  cloudflare-ddns:
+    build: .
+    environment:
+      - API_KEY=your_cloudflare_api_key
+      - ZONE=your_domain.com
+      - SUBDOMAIN=subdomain
+      - PROXIED=true
+    restart: unless-stopped
