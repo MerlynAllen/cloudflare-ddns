@@ -1,11 +1,15 @@
-version: '3.8'
-
 services:
   cloudflare-ddns:
-    build: .
+    build:
+      context: github.com/merlynallen/cloudflare-ddns
+      args:
+        ARCH: x86_64
+        LIBC: musl
+        VERSION: 1.0.0
     environment:
       - API_KEY=your_cloudflare_api_key
       - ZONE=your_domain.com
       - SUBDOMAIN=subdomain
       - PROXIED=true
-    restart: unless-stopped
+    volumes:
+      - ./ddns_config.json:/ddns/ddns_config.json
