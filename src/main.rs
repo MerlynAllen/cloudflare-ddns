@@ -46,8 +46,8 @@ struct Cmd {
     config: String,
     #[arg(short, long)]
     oneshot: bool,
-    #[arg(short, long, default_value = "Off")]
-    loglevel: LevelFilter,
+    #[arg(short, long)]
+    loglevel: Option<LevelFilter>,
 }
 
 #[derive(Debug, Serialize)]
@@ -240,7 +240,10 @@ fn oneshot(config: &Config) {
 fn main() {
     let mut logger_builder = pretty_env_logger::formatted_timed_builder();
     let args = Cmd::parse();
-    logger_builder.filter_level(args.loglevel).init();
+    if let Some(loglevel) = args.loglevel {
+        logger_builder.filter_level(loglevel);
+    }
+    logger_builder.init();
     // read config
     let config = Box::new(read_config(args.config).expect("Error reading config!"));
     let config: &'static _ = Box::leak(config);
